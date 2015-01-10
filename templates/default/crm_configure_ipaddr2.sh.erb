@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -x
+
+RESOURCE_NAME=p_haproxy_vip
+
+if [ -n "$(crm resource list | grep $RESOURCE_NAME)" ]; then
+	crm resource stop $RESOURCE_NAME
+	while [ -n "$(crm resource list | grep $RESOURCE_NAME | grep Started)" ]; do
+	    sleep 1
+	done
+	crm resource cleanup $RESOURCE_NAME
+	crm configure delete $RESOURCE_NAME
+fi
+
+crm configure primitive $RESOURCE_NAME ocf:IPaddr2 \
+    params ip="<%= node['haproxy']['virtual_ip_address'] %>" \
+    cidr_netmask="<%= node['haproxy']['virtual_ip_cidr_netmask'] %>" \
+    nic="<%= node['haproxy']['virtual_ip_nic'] %>" \
+    op monitor interval="30s" timeout="30s" \
+    op start timeout="120s" \
+    op stop timeout="120s"

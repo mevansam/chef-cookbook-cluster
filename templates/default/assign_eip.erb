@@ -1,0 +1,99 @@
+#!/opt/chef/embedded/bin/ruby
+
+require "rubygems"
+require "json"
+require "net/http"
+require "fog"
+
+def http_fetch(uri_str, limit = 10)
+    # You should choose a better exception.
+    raise ArgumentError, 'too many HTTP redirects' if limit == 0
+
+    response = Net::HTTP.get_response(URI(uri_str))
+
+    case response
+        when Net::HTTPSuccess then
+            response
+        when Net::HTTPRedirection then
+            location = response['location']
+            warn "redirected to #{location}"
+            http_fetch(location, limit - 1)
+        else
+            response.value
+    end
+end
+
+# Here we need to get server.id
+INSTANCE_HOST = '169.254.169.254'
+INSTANCE_ID_URL = '/latest/meta-data/instance-id'
+INSTANCE_REGION_URL = '/latest/meta-data/placement/availability-zone'
+
+resp = http_fetch("http://#{INSTANCE_HOST}/#{INSTANCE_ID_URL}")
+if resp.code!='200'
+	$stderr.puts "Unable to retrieve instance id: #{resp.code}"
+	exit 1
+end
+instance_id = resp.body
+
+resp = http_fetch("http://#{INSTANCE_HOST}/#{INSTANCE_REGION_URL}")
+if resp.code!='200'
+	$stderr.puts "Unable to retrieve instance's availability zone: #{resp.code}"
+	exit 1
+end
+region = resp.body
+
+# Cut out availability zone marker.
+# For example if region == "us-east-1c" after cutting out it will be
+# "us-east-1"
+
+region = region[0..-2]
+
+# First we get a connection object from amazon, region is
+# required if your instances are in other zone than the
+# gem's default one (us-east-1).
+
+c = Fog::Compute.new(
+	:provider => 'AWS',
+	:aws_access_key_id => '<%= @aws_access_key %>',
+	:aws_secret_access_key => '<%= @aws_secret_access_key %>',
+	:region => region )
+
+# Then we get Fog::Compute::AWS::Address to get allocation_id of Elastic IP.
+# For some reason I failed to make it work with IP address directly.
+# if I use Elastic IP instead of allocation id it always returns 400
+# Bad Request.
+
+case ARGV[0]
+	
+	when 'check'
+		# Check if Elastic IP is associated with this instance
+		eip = c.addresses.get(ARGV[1])
+		exit 1 if eip.server_id!=instance_id
+
+	when 'associate'
+		# Associate Elastic IP with current node.
+		eip = c.addresses.get(ARGV[1])
+		c.associate_address(instance_id, nil, nil, eip.allocation_id)
+
+		# Run chef-client
+		sleep 5
+		spawn('chef-client -l info &')
+
+	when 'disassociate'
+
+		begin
+			# Disassociate Elastic IP with current node.
+			eip = c.describe_addresses('public-ip' => [ ARGV[1] ])
+			c.disassociate_address(nil, eip[:body]["addressesSet"][0]["associationId"])
+
+			# Run chef-client
+			sleep 5
+			spawn('chef-client -l info &')
+
+		rescue Exception => msg
+			# Ignore errors
+			puts("\nError disassociating IP - ignoring: #{msg}")
+		end
+end
+
+exit 0

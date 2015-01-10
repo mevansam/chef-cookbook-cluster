@@ -1,0 +1,189 @@
+#!/bin/sh
+#
+#
+# OpenStack DHCP Service (neutron-dhcp-agent)
+#
+# Description:  Manages an OpenStack DHCP Service (neutron-dhcp-agent) process as an HA resource
+#
+# Authors: Emilien Macchi
+# Mainly inspired by the Nova Network resource agent written by Emilien Macchi & Sebastien Han
+#
+# Support:      openstack@lists.launchpad.net
+# License:      Apache Software License (ASL) 2.0
+#
+#
+# See usage() function below for more details ...
+#
+# OCF instance parameters:
+#   OCF_RESKEY_binary
+#   OCF_RESKEY_config
+#   OCF_RESKEY_plugin_config
+#   OCF_RESKEY_user
+#   OCF_RESKEY_pid
+#   OCF_RESKEY_amqp_server_port
+#   OCF_RESKEY_additional_parameters
+#######################################################################
+# Initialization:
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+
+DIR=`dirname $0`
+
+#######################################################################
+
+meta_data() {
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="AWSElasticIP">
+<version>1.0</version>
+
+<longdesc lang="en">
+Resource agent to associate an AWS elastic IP with this server if the given process search returns a running pid.
+</longdesc>
+<shortdesc lang="en">Associates an AWS elastic IP with this server</shortdesc>
+
+<parameters>
+
+<parameter name="elastic_ip" unique="0" required="0">
+<longdesc lang="en">
+The AWS Elastic IP to assign this server
+</longdesc>
+<shortdesc lang="en">AWS Elastic IP</shortdesc>
+<content type="string" />
+</parameter>
+
+<parameter name="process_search" unique="0" required="0">
+<longdesc lang="en">
+A regex to use to search for a process that servers traffic on the Elastic IP
+</longdesc>
+<shortdesc lang="en">Process search regex</shortdesc>
+<content type="string" />
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start" timeout="20" />
+<action name="stop" timeout="20" />
+<action name="status" timeout="20" />
+<action name="monitor" timeout="30" interval="20" />
+<action name="validate-all" timeout="5" />
+<action name="meta-data" timeout="5" />
+</actions>
+</resource-agent>
+END
+}
+
+#######################################################################
+# Functions invoked by resource manager actions
+
+aws_elastic_ip_status() {
+
+    local pid
+    local rc
+
+	pid=$(sh -c "${OCF_RESKEY_process_search}")
+    rc=$?
+
+	if [ $rc -ne 0 ]; then
+		ocf_log err "Server process search returned an error: \"${OCF_RESKEY_process_search}\""
+		return $OCF_ERR_GENERIC
+	fi
+
+	if [ -z "$pid" ]; then 
+		ocf_log info "Unable to find the pid that should be serving the elastic IP using search: \"${OCF_RESKEY_process_search}\""
+		return $OCF_NOT_RUNNING
+	fi
+
+	ocf_log info "The server process for serving traffic via the elastic IP is $pid."
+	return $OCF_SUCCESS
+}
+
+aws_elastic_ip_monitor() {
+
+    local rc
+
+	$DIR/AWSElasticIP.rb check "${OCF_RESKEY_elastic_ip}"
+    rc=$?
+	
+	if [ $rc -ne 0 ]; then
+		ocf_log info "The elastic IP is not associated with this server."
+		return $OCF_NOT_RUNNING
+	fi
+    
+    aws_elastic_ip_status
+    rc=$?
+    if [ $rc -ne $OCF_SUCCESS ]; then 
+    	$DIR/AWSElasticIP.rb disassociate "${OCF_RESKEY_elastic_ip}" 1>/etc/corosync/crm_configure_awselasticip.log 2>&1 3>&1
+		return $OCF_NOT_RUNNING
+    fi
+
+    return $OCF_SUCCESS
+}
+
+aws_elastic_ip_start() {
+
+    local rc
+    
+    aws_elastic_ip_status
+    rc=$?
+    [ $rc -ne $OCF_SUCCESS ] && return $rc
+
+    $DIR/AWSElasticIP.rb check "${OCF_RESKEY_elastic_ip}"
+    rc=$?
+
+    # If elastic IP is not associated with this server then attempt to associate it
+    if [ $rc -ne 0 ]; then
+		$DIR/AWSElasticIP.rb associate "${OCF_RESKEY_elastic_ip}" 1>/etc/corosync/crm_configure_awselasticip.log 2>&1 3>&1
+	    rc=$?
+
+		if [ $rc -ne 0 ]; then
+			ocf_log err "Associating elastic IP ${OCF_RESKEY_elastic_ip} with this server failed."
+			return $OCF_ERR_GENERIC
+		fi
+	fi
+
+    return $OCF_SUCCESS
+}
+
+aws_elastic_ip_stop() {
+
+    local rc
+    
+    $DIR/AWSElasticIP.rb check "${OCF_RESKEY_elastic_ip}"
+    rc=$?
+
+    # If elastic IP is associated with this server then attempt to disassociate it
+    if [ $rc -eq 0 ]; then
+
+		$DIR/AWSElasticIP.rb disassociate "${OCF_RESKEY_elastic_ip}" 1>/etc/corosync/crm_configure_awselasticip.log 2>&1 3>&1
+	    rc=$?
+
+		if [ $rc -ne 0 ]; then
+			ocf_log err "Disassociating elastic IP ${OCF_RESKEY_elastic_ip} with this server failed."
+			return $OCF_ERR_GENERIC
+		fi
+	fi
+    return $OCF_SUCCESS
+}
+
+#######################################################################
+
+case "$1" in
+  meta-data)    meta_data
+                exit $OCF_SUCCESS;;
+
+  usage|help)   exit $OCF_SUCCESS;;
+esac
+
+# What kind of method was invoked?
+case "$1" in
+  start)        aws_elastic_ip_start;;
+  stop)         aws_elastic_ip_stop;;
+  status)       aws_elastic_ip_status;;
+  monitor)      aws_elastic_ip_monitor;;
+  validate-all) ;;
+  *)            exit $OCF_ERR_UNIMPLEMENTED;;
+esac

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -x
+
+RESOURCE_NAME=p_aws_elastic_ip
+
+if [ -n "$(crm resource list | grep $RESOURCE_NAME)" ]; then
+	crm resource stop $RESOURCE_NAME
+	while [ -n "$(crm resource list | grep $RESOURCE_NAME | grep Started)" ]; do
+	    sleep 1
+	done
+	crm resource cleanup $RESOURCE_NAME
+	crm configure delete $RESOURCE_NAME
+fi
+
+crm configure primitive $RESOURCE_NAME ocf:AWSElasticIP \
+    params elastic_ip="<%= @elastic_ip %>" \
+    process_search="<%= @process_search %>" \
+    op monitor interval="30s" timeout="30s" \
+    op start timeout="120s" \
+    op stop timeout="120s"

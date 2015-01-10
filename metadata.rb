@@ -1,0 +1,13 @@
+name             'cluster'
+maintainer       'Mevan Samaratunga'
+maintainer_email 'mevansam@gmail.com'
+license          'All rights reserved'
+description      'Installs/Configures application clusters'
+long_description 'Installs and configures clusters using native application capabilities or pacemaker/corosync.'
+version          '1.0.0'
+
+depends          'firewall', '~> 0.11.8'
+depends          'percona',  '~> 0.15.5'
+depends          'rabbitmq', '>= 3.2.3'
+depends          'sysutils', '= 1.0.0'
+depends          'network',  '= 0.1.0'

@@ -1,0 +1,47 @@
+global
+
+<% node['haproxy']['log'].each do |log| %>
+  log <%= log['address'] %> len <%= log['length'] %> <%= log['facility'] %> <%= log['level'] %>
+<% end -%>
+
+  user <%= node['haproxy']['user'] %>
+  group <%= node['haproxy']['group'] %>
+
+  daemon
+
+<% node['haproxy']['global_parameters'].each do |param, value| %>
+  <%= param %> <%= value %>
+<% end -%>
+
+<% if node['haproxy']['enable_stats_socket'] -%>
+  stats socket <%= node['haproxy']['stats_socket_path'] %> user <%= node['haproxy']['stats_socket_user'] %> group <%= node['haproxy']['stats_socket_group'] %>
+<% end -%>
+<% node['haproxy']['global_options'].each do |option| %>
+  option <%= option %>
+<% end -%>
+
+defaults
+  log global
+
+<% node['haproxy']['default_parameters'].each do |param, value| %>
+  <%= param %> <%= value %>
+<% end -%>
+
+<% node['haproxy']['default_options'].each do |option| %>
+  option <%= option %>
+<% end -%>
+
+<% @defaults_timeouts.sort.map do | value, time | -%>
+  timeout <%= value %> <%= time %>
+<% end -%>
+
+# Application listeners
+
+<% node['haproxy']['listeners'].each do |type, listeners | %>
+<% listeners.each do |name, listen| %>
+<%= type %> <%= name %>
+<% listen.each do |option| %>
+  <%= option %>
+<% end -%>
+<% end -%>
+<% end -%>
