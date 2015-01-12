@@ -98,8 +98,20 @@ search(:node, search_query).each do |percona_node|
 end
 
 initializing_node = (initializing_node_name==node.name)
+if initializing_node && !node["cluster_initializing_node"]
+    cluster_address = "gcomm://"
+else
+    cluster_address = "gcomm://#{cluster_ips.join(',')}"
+    node.override["percona"]["skip_passwords"] = true
+end
+
 node.set["cluster_initializing_node"] = initializing_node
 node.save
+
+Chef::Log.info("Percona XtraDB cluster address is: #{cluster_address}")
+node.override["percona"]["cluster"]["wsrep_cluster_name"] = cluster_name
+node.override["percona"]["cluster"]["wsrep_cluster_address"] = cluster_address
+node.override["percona"]["cluster"]["wsrep_node_name"] = node['hostname']
 
 cluster_ips.each do |ip|
 
@@ -122,14 +134,13 @@ cluster_ips.each do |ip|
     end
 end
 
-cluster_address = "gcomm://#{cluster_ips.join(',')}"
-Chef::Log.info("Using Percona XtraDB cluster address of: #{cluster_address}")
-node.override["percona"]["cluster"]["wsrep_cluster_address"] = cluster_address
-node.override["percona"]["cluster"]["wsrep_node_name"] = node['hostname']
-
 include_recipe 'percona::cluster'
 include_recipe 'percona::backup'
 include_recipe 'percona::toolkit'
+
+template = resources(template: "#{node['percona']['main_config_file']}")
+template.cookbook("percona")
+template.source("my.cnf.cluster.erb")
 
 ## Add haproxy user for haproxy mysql health check
 
