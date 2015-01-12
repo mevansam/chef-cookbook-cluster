@@ -65,7 +65,7 @@ backend_default_ip = node['haproxy']['backend_default_ip']
 
 server_pools.each do |name, config|
 
-    cluster_name = config['cluster_name']
+    cluster_name = config['pool_cluster_name']
     port = config['port']
     unless cluster_name.nil? || port.nil?
 
