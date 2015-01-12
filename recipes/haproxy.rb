@@ -188,9 +188,11 @@ if node['haproxy']['is_clustered']
         haproxy_fqdn = node['haproxy']['fqdn']
         virtual_ip_address = node['haproxy']['virtual_ip_address']
 
-        dns_entry haproxy_fqdn do
-            address virtual_ip_address
-            not_if { virtual_ip_address.nil? || haproxy_fqdn==virtual_ip_address }
+        unless haproxy_fqdn.nil? || virtual_ip_address.nil? || haproxy_fqdn==virtual_ip_address
+            
+            dns_entry haproxy_fqdn do
+                address virtual_ip_address
+            end
         end
 
         ruby_block "configure common crm properties" do
@@ -269,8 +271,9 @@ else
     fqdn = node['fqdn']
     haproxy_fqdn = node['haproxy']['fqdn']
 
-    dns_entry fqdn do
-        name_alias haproxy_fqdn
-        only_if { fqdn!=haproxy_fqdn }
-    end
+    unless haproxy_fqdn.nil? || haproxy_fqdn==fqdn
+        dns_entry fqdn do
+            name_alias haproxy_fqdn
+        end
+    end    
 end
