@@ -55,7 +55,7 @@ default['haproxy']['profiles'] = { }
 #
 # 'server_pools' => {
 #     <pool_name> => {
-#         'cluster_role' => <chef node role used to search for pool members>
+#         'pool_cluster_name' => <chef node role used to search for pool members>
 #         'port' => <back end port>
 #         'profile' => <profile_name> 
 # }

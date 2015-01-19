@@ -1,6 +1,6 @@
 #
-# Cookbook Name:: openstack-services
-# Recipe:: ha-database
+# Cookbook Name:: cluster
+# Recipe:: percona
 #
 # Author: Mevan Samaratunga
 # Email: mevansam@gmail.com

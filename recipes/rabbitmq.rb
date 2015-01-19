@@ -1,6 +1,6 @@
 #
 # Cookbook Name:: cluster
-# Recipe:: harabbitmq
+# Recipe:: rabbitmq
 #
 # Author: Mevan Samaratunga
 # Email: mevansam@gmail.com
