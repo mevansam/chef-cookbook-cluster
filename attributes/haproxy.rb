@@ -1,9 +1,15 @@
 # HAProxy cluster configuration attributes
 
-default['haproxy']['is_clustered'] = false
-
 # The fully qualified domain name of the haproxy endpoint
 default['haproxy']['fqdn'] = nil
+
+# Global settings
+default["haproxy"]["global_parameters"] = { }
+default["haproxy"]["global_options"] = [ ]
+
+# Default settings
+default["haproxy"]["default_parameters"] = { }
+default["haproxy"]["default_options"] = [ ]
 
 # If nodes in the pools have not been created yet then 
 # all pools will be configured with this default IP.

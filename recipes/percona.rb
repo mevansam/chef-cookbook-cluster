@@ -78,93 +78,101 @@ node.override["percona"]["encrypted_data_bag"] = "passwords-#{node.chef_environm
 
 # Setup the Percona XtraDB Cluster
 cluster_name = node["cluster_name"]
+if cluster_name.nil?
 
-search_query = "cluster_name:#{cluster_name} AND chef_environment:#{node.chef_environment}"
-Chef::Log.info("Searching for cluster nodes matching: #{search_query}")
-
-cluster_ips = []
-initializing_node_name = nil
-
-search(:node, search_query).each do |percona_node|
-
-    # Pick the initializing node to be the lowest order node name
-    initializing_node_name = percona_node.name \
-        if initializing_node_name.nil? || percona_node.name<initializing_node_name
-
-    next if percona_node["ipaddress"]==node["ipaddress"]
-
-    Chef::Log.info "Found Percona XtraDB cluster peer: #{percona_node['ipaddress']}"
-    cluster_ips << percona_node["ipaddress"]
-end
-
-initializing_node = (initializing_node_name==node.name)
-if initializing_node && !node["cluster_initializing_node"]
-    cluster_address = "gcomm://"
+    # Setup a single node unclustered Percona server
+    include_recipe 'percona::server'
+    include_recipe 'percona::backup'
+    include_recipe 'percona::toolkit'
 else
-    cluster_address = "gcomm://#{cluster_ips.join(',')}"
-    node.override["percona"]["skip_passwords"] = true
-end
+    # Setup a multi-node cluster of nodes having the same 'cluster_name'
+    search_query = "cluster_name:#{cluster_name} AND chef_environment:#{node.chef_environment}"
+    Chef::Log.info("Searching for cluster nodes matching: #{search_query}")
 
-node.set["cluster_initializing_node"] = initializing_node
-node.save
+    cluster_ips = []
+    initializing_node_name = nil
 
-Chef::Log.info("Percona XtraDB cluster address is: #{cluster_address}")
-node.override["percona"]["cluster"]["wsrep_cluster_name"] = cluster_name
-node.override["percona"]["cluster"]["wsrep_cluster_address"] = cluster_address
-node.override["percona"]["cluster"]["wsrep_node_name"] = node['hostname']
+    search(:node, search_query).each do |percona_node|
 
-cluster_ips.each do |ip|
+        # Pick the initializing node to be the lowest order node name
+        initializing_node_name = percona_node.name \
+            if initializing_node_name.nil? || percona_node.name<initializing_node_name
 
-    firewall_rule "allow Percona group communication to peer #{ip}" do
-        source ip
-        port 4567
-        action :allow
+        next if percona_node["ipaddress"]==node["ipaddress"]
+
+        Chef::Log.info "Found Percona XtraDB cluster peer: #{percona_node['ipaddress']}"
+        cluster_ips << percona_node["ipaddress"]
     end
 
-    firewall_rule "allow Percona state transfer to peer #{ip}" do
-        source ip
-        port 4444
-        action :allow
+    initializing_node = (initializing_node_name==node.name)
+    if initializing_node && !node["cluster_initializing_node"]
+        cluster_address = "gcomm://"
+    else
+        cluster_address = "gcomm://#{cluster_ips.join(',')}"
+        node.override["percona"]["skip_passwords"] = true
     end
 
-    firewall_rule "allow Percona incremental state transfer to peer #{ip}" do
-        source ip
-        port 4568
-        action :allow
-    end
-end
+    node.set["cluster_initializing_node"] = initializing_node
+    node.save
 
-include_recipe 'percona::cluster'
-include_recipe 'percona::backup'
-include_recipe 'percona::toolkit'
+    Chef::Log.info("Percona XtraDB cluster address is: #{cluster_address}")
+    node.override["percona"]["cluster"]["wsrep_cluster_name"] = cluster_name
+    node.override["percona"]["cluster"]["wsrep_cluster_address"] = cluster_address
+    node.override["percona"]["cluster"]["wsrep_node_name"] = node['hostname']
 
-template = resources(template: "#{node['percona']['main_config_file']}")
-template.cookbook("percona")
-template.source("my.cnf.cluster.erb")
+    cluster_ips.each do |ip|
 
-## Add haproxy user for haproxy mysql health check
-
-if initializing_node
-
-    haproxy_cluster_name = node["percona"]["haproxy_cluster_name"]
-    unless haproxy_cluster_name.nil?
-
-        haproxy_user_insert = "USE mysql; DELETE FROM user WHERE User='haproxy';"
-        search(:node, "cluster_name:#{haproxy_cluster_name} AND chef_environment:#{node.chef_environment}").each do |haproxy_node|
-
-            Chef::Log.info("Found haproxy cluster node '#{haproxy_node.name}' for cluster '#{haproxy_cluster_name}'.")
-            haproxy_user_insert += " INSERT INTO user (Host, User) values ('#{haproxy_node["ipaddress"]}', 'haproxy');"
+        firewall_rule "allow Percona group communication to peer #{ip}" do
+            source ip
+            port 4567
+            action :allow
         end
-        haproxy_user_insert += " FLUSH PRIVILEGES;"
 
-        script "Create haproxy user" do
-            interpreter "bash"
-            user "root"
-            cwd "/tmp"
-            code <<-EOH
-                mysql -e "#{haproxy_user_insert}"
-                [ $? -eq 0 ] || exit $?
-            EOH
+        firewall_rule "allow Percona state transfer to peer #{ip}" do
+            source ip
+            port 4444
+            action :allow
+        end
+
+        firewall_rule "allow Percona incremental state transfer to peer #{ip}" do
+            source ip
+            port 4568
+            action :allow
+        end
+    end
+
+    include_recipe 'percona::cluster'
+    include_recipe 'percona::backup'
+    include_recipe 'percona::toolkit'
+
+    template = resources(template: "#{node['percona']['main_config_file']}")
+    template.cookbook("percona")
+    template.source("my.cnf.cluster.erb")
+
+    ## Add haproxy user for haproxy mysql health check
+
+    if initializing_node
+
+        haproxy_cluster_name = node["percona"]["haproxy_cluster_name"]
+        unless haproxy_cluster_name.nil?
+
+            haproxy_user_insert = "USE mysql; DELETE FROM user WHERE User='haproxy';"
+            search(:node, "cluster_name:#{haproxy_cluster_name} AND chef_environment:#{node.chef_environment}").each do |haproxy_node|
+
+                Chef::Log.info("Found haproxy cluster node '#{haproxy_node.name}' for cluster '#{haproxy_cluster_name}'.")
+                haproxy_user_insert += " INSERT INTO user (Host, User) values ('#{haproxy_node["ipaddress"]}', 'haproxy');"
+            end
+            haproxy_user_insert += " FLUSH PRIVILEGES;"
+
+            script "Create haproxy user" do
+                interpreter "bash"
+                user "root"
+                cwd "/tmp"
+                code <<-EOH
+                    mysql -e "#{haproxy_user_insert}"
+                    [ $? -eq 0 ] || exit $?
+                EOH
+            end
         end
     end
 end

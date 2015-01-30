@@ -23,12 +23,6 @@ rabbit_passwords = Chef::EncryptedDataBagItem.load("passwords-#{node.chef_enviro
 
 node.override['rabbitmq']['erlang_cookie'] = rabbit_passwords["erlang_cookie"]
 
-default_user = rabbit_passwords["default_user"]
-default_password = rabbit_passwords["default_password"]
-
-node.override['rabbitmq']['default_user'] = default_user
-node.override['rabbitmq']['default_pass'] = default_password
-
 if node['rabbitmq']['ssl']
     !node["rabbitmq"]["certificate_databag_item"].nil? &&
     !node["rabbitmq"]["certificate_databag_item"].empty?
@@ -70,25 +64,41 @@ end
 
 # Determine which nodes are in rabbitmq cluster
 cluster_name = node["cluster_name"]
-cluster_disk_nodes = []
+unless cluster_name.nil?
 
-search_query = "cluster_name:#{cluster_name} AND chef_environment:#{node.chef_environment}"
-Chef::Log.info("Searching for cluster nodes matching: #{search_query}")
+    cluster_disk_nodes = []
 
-search(:node, search_query).each do |rabbitmq_node|
-    
-    rabbitmq_cluster_node = "rabbit@#{rabbitmq_node['hostname']}"
-    Chef::Log.info("Adding node '#{rabbitmq_node.name}' as rabbitmq cluster node '#{rabbitmq_cluster_node}'.")
+    search_query = "cluster_name:#{cluster_name} AND chef_environment:#{node.chef_environment}"
+    Chef::Log.info("Searching for cluster nodes matching: #{search_query}")
 
-    cluster_disk_nodes << rabbitmq_cluster_node
+    search(:node, search_query).each do |rabbitmq_node|
+        
+        rabbitmq_cluster_node = "rabbit@#{rabbitmq_node['hostname']}"
+        Chef::Log.info("Adding node '#{rabbitmq_node.name}' as rabbitmq cluster node '#{rabbitmq_cluster_node}'.")
+
+        cluster_disk_nodes << rabbitmq_cluster_node
+    end
+
+    node.override['rabbitmq']['cluster'] = true
+    node.override['rabbitmq']['cluster_disk_nodes'] = cluster_disk_nodes
 end
-
-node.override['rabbitmq']['cluster_disk_nodes'] = cluster_disk_nodes
 
 include_recipe 'rabbitmq::default'
 include_recipe 'rabbitmq::mgmt_console'
 include_recipe 'rabbitmq::virtualhost_management'
 include_recipe 'rabbitmq::policy_management'
+
+rabbitmq_user node['rabbitmq']['default_user'] do
+    action :delete
+end
+
+default_user = rabbit_passwords["default_user"]
+default_password = rabbit_passwords["default_password"]
+
+rabbitmq_user default_user do
+    password default_password
+    action :add
+end
 
 node['rabbitmq']['virtualhosts'].each do |virtualhost|
     rabbitmq_user default_user do

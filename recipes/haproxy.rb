@@ -175,8 +175,17 @@ template = resources(template: "#{node['haproxy']['conf_dir']}/haproxy.cfg")
 template.cookbook('cluster')
 template.source('haproxy.cfg.erb')
 
-if node['haproxy']['is_clustered']
+if node["cluster_name"].nil?
 
+    fqdn = node['fqdn']
+    haproxy_fqdn = node['haproxy']['fqdn']
+
+    unless haproxy_fqdn.nil? || haproxy_fqdn==fqdn
+        dns_entry fqdn do
+            name_alias haproxy_fqdn
+        end
+    end    
+else
     include_recipe 'cluster::pacemaker'
 
     do_init_cluster = !node["cluster_initializing_node"].nil? && node["cluster_initializing_node"]
@@ -267,13 +276,4 @@ if node['haproxy']['is_clustered']
         end
         action :nothing
     end
-else
-    fqdn = node['fqdn']
-    haproxy_fqdn = node['haproxy']['fqdn']
-
-    unless haproxy_fqdn.nil? || haproxy_fqdn==fqdn
-        dns_entry fqdn do
-            name_alias haproxy_fqdn
-        end
-    end    
 end
