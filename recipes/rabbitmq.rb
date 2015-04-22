@@ -21,6 +21,12 @@
 encryption_key = ::SysUtils::get_encryption_secret(node)
 rabbit_passwords = Chef::EncryptedDataBagItem.load("passwords-#{node.chef_environment}", "rabbit", encryption_key)
 
+default_user = rabbit_passwords["default_user"]
+default_password = rabbit_passwords["default_password"]
+
+node.override['rabbitmq']['default_user'] = default_user
+node.override['rabbitmq']['default_pass'] = default_password
+
 node.override['rabbitmq']['erlang_cookie'] = rabbit_passwords["erlang_cookie"]
 
 if node['rabbitmq']['ssl']
@@ -42,14 +48,14 @@ if node['rabbitmq']['ssl']
         mode "0644"
         content certificates["cacert"]
     end
-    
+
     file cert_path do
         owner "root"
         group "root"
         mode "0644"
         content certificates["cert"]
     end
-    
+
     file key_path do
         owner "root"
         group "root"
@@ -72,11 +78,17 @@ unless cluster_name.nil?
     Chef::Log.info("Searching for cluster nodes matching: #{search_query}")
 
     search(:node, search_query).each do |rabbitmq_node|
-        
+
         rabbitmq_cluster_node = "rabbit@#{rabbitmq_node['hostname']}"
         Chef::Log.info("Adding node '#{rabbitmq_node.name}' as rabbitmq cluster node '#{rabbitmq_cluster_node}'.")
 
         cluster_disk_nodes << rabbitmq_cluster_node
+
+        unless rabbitmq_node["ipaddress"]==node["ipaddress"]
+            hostsfile_entry rabbitmq_node["ipaddress"] do
+                hostname rabbitmq_node['hostname']
+            end
+        end
     end
 
     node.override['rabbitmq']['cluster'] = true
@@ -87,23 +99,4 @@ include_recipe 'rabbitmq::default'
 include_recipe 'rabbitmq::mgmt_console'
 include_recipe 'rabbitmq::virtualhost_management'
 include_recipe 'rabbitmq::policy_management'
-
-rabbitmq_user node['rabbitmq']['default_user'] do
-    action :delete
-end
-
-default_user = rabbit_passwords["default_user"]
-default_password = rabbit_passwords["default_password"]
-
-rabbitmq_user default_user do
-    password default_password
-    action :add
-end
-
-node['rabbitmq']['virtualhosts'].each do |virtualhost|
-    rabbitmq_user default_user do
-        vhost virtualhost
-        permissions ".* .* .*"
-        action :set_permissions
-    end
-end
+include_recipe 'rabbitmq::user_management'
