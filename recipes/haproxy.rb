@@ -175,7 +175,7 @@ template = resources(template: "#{node['haproxy']['conf_dir']}/haproxy.cfg")
 template.cookbook('cluster')
 template.source('haproxy.cfg.erb')
 
-if node["cluster_name"].nil?
+if node['haproxy']['virtual_ip_address'].nil?
 
     fqdn = node['fqdn']
     haproxy_fqdn = node['haproxy']['fqdn']
