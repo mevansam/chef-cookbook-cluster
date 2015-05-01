@@ -47,6 +47,7 @@ unless cluster_name.nil?
             cluster_node["ipaddress"],
             cluster_node["hostname"] ]
     end
+    cluster_members.sort! { |a,b| a[1] <=> b[1] }
 
     unless shell("which crm", true).empty?
         shell("crm status").lines do |l|

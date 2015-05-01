@@ -90,6 +90,7 @@ unless cluster_name.nil?
             end
         end
     end
+    cluster_disk_nodes.sort!
 
     node.override['rabbitmq']['cluster'] = true
     node.override['rabbitmq']['cluster_disk_nodes'] = cluster_disk_nodes

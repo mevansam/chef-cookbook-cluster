@@ -103,6 +103,7 @@ else
         Chef::Log.info "Found Percona XtraDB cluster peer: #{percona_node['ipaddress']}"
         cluster_ips << percona_node["ipaddress"]
     end
+    cluster_ips.sort!
 
     initializing_node = (initializing_node_name==node.name)
     if initializing_node && !node["cluster_initializing_node"]
