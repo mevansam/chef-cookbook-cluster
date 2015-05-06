@@ -7,6 +7,8 @@ long_description 'Installs and configures clusters using native application capa
 version          '1.0.0'
 
 depends          'firewall',      '~> 0.11.8'
+depends          'monit',         '~> 0.7.5'
+depends          'elasticsearch', '~> 0.3.13'
 depends          'percona',       '~> 0.15.5'
 depends          'rabbitmq',      '>= 3.2.3'
 depends          'sysutils',      '= 1.0.0'

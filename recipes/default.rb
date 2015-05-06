@@ -1,5 +1,5 @@
 #
-# Cookbook Name:: pacemaker
+# Cookbook Name:: cluster
 # Recipe:: default
 #
 # Author: Mevan Samaratunga
