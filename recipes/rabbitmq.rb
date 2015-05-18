@@ -94,6 +94,9 @@ unless cluster_name.nil?
 
     node.override['rabbitmq']['cluster'] = true
     node.override['rabbitmq']['cluster_disk_nodes'] = cluster_disk_nodes
+    node.override['rabbitmq']['clustering']['use_auto_clustering'] = true
+    node.override['rabbitmq']['clustering']['cluster_nodes'] = cluster_disk_nodes.map { |n| { 'name' => n } }
+    node.override['rabbitmq']['cluster_partition_handling'] = 'autoheal'
 end
 
 include_recipe 'rabbitmq::default'
